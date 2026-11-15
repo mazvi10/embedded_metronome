@@ -13,7 +13,7 @@
  */
 
 /* INCLUDE FILES */
-// tbd?
+#include "SonarSensor.h"
 
 /* CONSTANTS */
 #define TRIGGER				(1U << 4)
