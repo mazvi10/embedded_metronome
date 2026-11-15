@@ -23,4 +23,4 @@ void sonar_init(void);			// initialize the sonar sensor
 int sonar_read(void);			// read/compute sonar distance data
 void sonarTimer_init(int microseconds);		// initialize microsecond timer
 void TIM17_IRQHandler (void);	// handle timer interrupts
-
+#endif 
