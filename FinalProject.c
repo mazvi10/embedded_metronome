@@ -49,15 +49,17 @@ int main (void){
 	GPIOA->MODER |= (GPIO_OUTPUT << GPIO_MODER_MODE6_Pos);
 
 	// intialize
-	UART_init(); // Mazvita is working on...
+	uart1_init(); // Mazvita is working on...
 	i2c_init(); // already written
 	SevenSeg_init(); // already written
-	Servo_init(); // written? will look into
-	adc_init(); // written? might need to sliglty update for sonar?
+	tim14_pa7_pwm_init(PWM_PSC_FACTOR, PWM_TIMER_MAX);
+	adc_init(); 
 	timer_init();
+	sonar_init(); 
 
 	// define variables
-	int potVal = 0;
+	int pot1Val = 0;
+	int pot2Val = 0;
 	int bpm = 0;
 	int beatInterval = 0;
 	int sonarDistance = 0;
@@ -71,12 +73,16 @@ int main (void){
 		if (timerFlag == 1){
 			timerFlag = 0;
 
-			// read pot value
+			// read first pot value
 			setChannel(0);
-			potVal = adc_read();
-
+			pot1Val = adc_read();
+			
+			// read second pot value
+			setChannel (0); 
+			pot2Val = adc_read();
+			
 			// calculate bpm
-			bpm = (potVal * BPM_MAX) / ADC_MAX;
+			bpm = (pot2Val * BPM_MAX) / ADC_MAX;
 			if (bpm > 0){
 				beatInterval = 60000/bpm;
 				flashEn = 1;
@@ -85,7 +91,8 @@ int main (void){
 				flashEn = 0;
 			}
 
-			// somehow read sonar data
+			// read sonar distance
+			sonarDistance = sonar_read(); 
 
 			// enable/disable servo
 			if (sonarDistance < MIN_DISTANCE){
@@ -97,9 +104,17 @@ int main (void){
 
 			// somehow read bluetooth data
 
-			// determine seven seg mode (IF WE ARE USING BLUETOOTH TO SEND BPM DATA CAN WE STILL USE IT TO CHANGE THE MODE?
-
-		};
+			// determine seven seg mode
+			if (pot1Val < 1365){	//bpm display mode
+				sevenSegMode = 0; // bpm display mode
+			}
+			else if (pot1Val <= 2371){
+				sevenSegMode = 1; // beat on beat mode
+			}
+			else {
+				sevenSegMode = 2; // speed mode
+			}
+		}
 		if (milliseconds() - lastBeatTime >= beatInterval){
 
 			lastBeatTime = milliseconds();
@@ -142,6 +157,8 @@ int main (void){
 				else{
 					update_servo(SERVO_MID)
 					position = 0;
-				};
-			};
-		};
+				}
+			}
+		}
+	}
+}
