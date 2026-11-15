@@ -20,6 +20,7 @@
 #define ECHO				(1U << 5)
 #define TIM17_PSC_FACTOR	12 // 12MH/12 = 1MHz = 1us
 volatile int usTicks = 0;
+volatile int timerInterval = 10; 
 
 
 void sonar_init(void){
@@ -38,13 +39,14 @@ void sonar_init(void){
 	GPIOB->MODER |= (GPIO_INPUT << GPIO_MODER_MODE5_POS);
 	
 	// initlialize timer
-	sonarTimer_init(10);
+	sonarTimer_init(timerInterval);
 	
 }
 
 int sonar_read(void){
 	//set count to 0; 	
 	usTicks = 0;
+	timerInterval = 0; 
 
 	// set trigger high
 	GPIOB->ODR |= TRIGGER;
@@ -107,7 +109,7 @@ void TIM17_IRQHandler(void) {
 	__disable_irq();
 	/* Clear UIF in status register */
 	TIM17->SR &= ~TIM_SR_UIF;
-	usTicks += 10; ;
+	usTicks += timerInterval; ;
 	__enable_irq();
 }
 
