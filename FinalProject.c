@@ -23,7 +23,7 @@
 update_servo(void);
 
 /* CONSTANTS */
-#define MIN_DISTANCE			// fill in based on sonar info
+#define MIN_DISTANCE	5		// fill in based on sonar info
 #define BPM_MAX			200 	// subject to change just an estimate
 #define PWM_PSC_FACTOR	60		// pre-scaler
 #define PWM_TIMER_MAX	4000	// 20ms
@@ -31,13 +31,16 @@ update_servo(void);
 #define SERVO_MID		300		// 1.5ms
 #define SERVO_MAX		400		// 2ms
 #define ADC_MAX			4095	// 12-bit converter
+#define BUFFER 			25		// potentiometer buffer
 #define LED1			(1U<<5)
 #define LED2			(1U<<6)
 volatile int timerFlag = 0;
+int uart1_RxAvail(void);
+int uart2_RxAvail(void);
 
 /* CODE */
 int main (void){
-	// Enable Clock?
+	// Enable Clock
 	RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
 
 	// Configure PA5 (RED LED) as an output
@@ -49,18 +52,24 @@ int main (void){
 	GPIOA->MODER |= (GPIO_OUTPUT << GPIO_MODER_MODE6_Pos);
 
 	// intialize
-	uart1_init(); // Mazvita is working on...
-	i2c_init(); // already written
-	SevenSeg_init(); // already written
+	uart1_init(); 
+	uart2_init();
+	i2c_init(); 
+	SevenSeg_init(); 
 	tim14_pa7_pwm_init(PWM_PSC_FACTOR, PWM_TIMER_MAX);
+	tim16_ms_interrupt_init(50);
 	adc_init(); 
-	timer_init();
-	sonar_init(); 
-
+	sonar_init();
+	bluefruit_mode_init();
+	bluefruit_data_mode();
+	
+	//test uart1-2 pass through
+	printf("UART1-2 passthorugh test \r\n");
+	
 	// define variables
 	int pot1Val = 0;
 	int pot2Val = 0;
-	int bpm = 0;
+	uint16_t bpm = 0;
 	int beatInterval = 0;
 	int sonarDistance = 0;
 	int displayMode = 0;
@@ -68,8 +77,33 @@ int main (void){
 	int lastBeatTime = 0;
 	int servoPosition = 0;
 	int ledPosition = 0;
+	int sevenSegMode = 0; 
+	int beatDisplay = 0;
+	int recievedNum = 0;
+	int bluetoothConnected = 0; 
+	uint8_t display_buffer[2 * HT16K33_NBUF];
 
 	while (1){
+		if uart1_RxAvail()){
+			int c = uart1_read();
+			uart2_write(c);
+
+			// turn incoming characters into an int
+			if (c >= '0' && c <= '9'){
+				recievedNum = (recievedNum * 10) + (c - '0');
+			}
+			else if ( c== '\n' || c == '\r'){
+				bpm = recievedNum; 
+				recievedNum = 0; 
+			}
+			bluetoothConnected = 1; 
+		}
+
+		if (uart2_(RxAvail()){
+			int c = uart2_read();
+			uart1_write(c);
+		
+		}
 		if (timerFlag == 1){
 			timerFlag = 0;
 
@@ -78,11 +112,12 @@ int main (void){
 			pot1Val = adc_read();
 			
 			// read second pot value
-			setChannel (0); 
+			setChannel (1); 
 			pot2Val = adc_read();
 			
 			// calculate bpm
-			bpm = (pot2Val * BPM_MAX) / ADC_MAX;
+			// figure out how to turn on this if bluetooth is off. 
+			// bpm = (pot2Val * BPM_MAX) / ADC_MAX;
 			if (bpm > 0){
 				beatInterval = 60000/bpm;
 				flashEn = 1;
@@ -105,14 +140,17 @@ int main (void){
 			// somehow read bluetooth data
 
 			// determine seven seg mode
-			if (pot1Val < 1365){	//bpm display mode
+			if (pot1Val < (1365-BUFFER)){	//bpm display mode
 				sevenSegMode = 0; // bpm display mode
 			}
-			else if (pot1Val <= 2371){
+			else if (pot1Val <= (2371-BUFFER) & pot1Val > 1365){
 				sevenSegMode = 1; // beat on beat mode
 			}
-			else {
+			else if (pot1Val > 2371) {
 				sevenSegMode = 2; // speed mode
+			}
+			else {
+				sevenSegMode = 0; 
 			}
 		}
 		if (milliseconds() - lastBeatTime >= beatInterval){
@@ -157,6 +195,58 @@ int main (void){
 				else{
 					update_servo(SERVO_MID)
 					position = 0;
+				}
+			}
+
+			//seven seg bpm mode
+			if (sevenSegMode = 1){
+				SevenSeg_number(bpm, display_buffer);
+				SevenSeg_write(display_buffer);
+			}
+
+			// seven seg speed mode
+			if (sevenSegMode = 2){
+				if (bpm > 100){
+					// seven seg display slow
+					display_buffer[0] = 0x71;	// F
+					display_buffer[2] = 0x77;	// A
+					display_buffer[6] = 0x5B;	// s
+					display_buffer[8] = 0x78;	// t
+				}
+				else if (bpm <= 100){
+					display_buffer[0] = 0x00;	// off
+					display_buffer[2] = 0x5B;	// s
+					display_buffer[6] = 0x38;	// L
+					display_buffer[8] = 0x3F;	// 0	
+				}
+			}
+
+			// seven seg beat mode
+			if (sevenSegMode = 1){
+				if (beatDisplay = 1){
+					// set buffer to say bEAt
+					display_buffer[0] = 0x7C;	// b
+					display_buffer[2] = 0x79;	// E
+					display_buffer[6] = 0x77;	// A
+					display_buffer[8] = 0x78;	// t
+
+					// write to seven seg
+					SevenSeg_write (display_buffer);
+
+					//reset beat display
+					beatDisplay = 0;
+				}
+				else {
+					display_buffer[0] = 0x00;	// off
+					display_buffer[2] = 0x00;	// off
+					display_buffer[6] = 0x00;	// off
+					display_buffer[8] = 0x00;	// off
+
+					// write to seven seg
+					SevenSeg_write (display_buffer);
+
+					// update beat display
+					beatDisplay = 1;
 				}
 			}
 		}
