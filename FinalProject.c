@@ -6,12 +6,15 @@
  *
  * Dependencies:
  *
- * I/O pins: PA:	0, 1 (Potentiometer 1 and 2) 
- *					5, 6 (LED 1 and 2)
- *					9  (USART 1 Tx )
- *					10 (USART 1 Rx )
- *					11 (USART 1 CTS)
- *					12 (USART 1 RTS)
+ * I/O pins:	PA:	0, 1 (Potentiometer 1 and 2)	(INPUT)
+ *					5, 6 (LED 1 and 2)				(OUTPUT)
+ *					9  (USART 1 Tx )				(ALTERNATE FUNCTION)
+ *					10 (USART 1 Rx )				(ALTERNATE FUNCTION)
+ *					11 (USART 1 CTS)				(ALTERNATE FUNCTION)
+ *					12 (USART 1 RTS)				(ALTERNATE FUNCTION)
+ * 				PB: 4 (Sonar Sensor Trigger)		(OUTPUT)
+ * 					5 (Sonar Sensor Echo)			(INPUT)
+ * 					8, 9 (Seven-Seg Display)		(OUTPUT)
  *
  * Revisions:
  *
@@ -29,7 +32,10 @@
 
 
 /* FUNCTIONS */
-update_servo(void);
+void update_servo(void);
+int uart1_RxAvail(void);
+int uart2_RxAvail(void);
+void TIM16_IRQHandler(void);
 
 /* CONSTANTS */
 #define MIN_DISTANCE	5		// fill in based on sonar info
@@ -41,12 +47,10 @@ update_servo(void);
 #define SERVO_MAX		400		// 2ms
 #define ADC_MAX			4095	// 12-bit converter
 #define BUFFER 			25		// potentiometer buffer
-#define BT_TIMEOUT 		1000	// 1 second bluetooth timeout 
+#define BT_TIMEOUT 		8000	// 8 second bluetooth timeout 
 #define LED1			(1U<<5)
 #define LED2			(1U<<6)
 volatile int timerFlag = 0;
-int uart1_RxAvail(void);
-int uart2_RxAvail(void);
 
 /* CODE */
 int main (void){
@@ -282,3 +286,20 @@ void TIM16_IRQHandler(void) {
 	__enable_irq();
 }
 
+int uart2_rxAvail(void){
+	if(USART->ISR & USART_ISR_RXNE_RXFNE) {
+		return 1; 
+	}
+	else{
+		return 0;
+	}
+}
+
+int uart1RxAvail(void){
+	if(USART1->ISR & USART_ISR_RXNE_RXFNE){
+		return 1;
+	}
+	else {
+		return 0; 
+	}
+}
