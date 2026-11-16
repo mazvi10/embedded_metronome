@@ -15,8 +15,10 @@
 #ifndef SONARSENSOR_H_
 #define SONARSENSOR_H_
 
-#include "stm32C0x.h"
+
+#include "ES28.h"
 #include <stdio.h>
+#include "stm32c0xx.h"
 
 // functions
 void sonar_init(void);			// initialize the sonar sensor

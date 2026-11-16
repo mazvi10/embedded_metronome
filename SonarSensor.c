@@ -29,14 +29,14 @@ void sonar_init(void){
 	
 	// Configure trigger pin (PB4) as output
 	GPIOB->MODER &= ~GPIO_MODER_MODE4_Msk;
-	GPIOB->MODER |= (GPIO_OUTPUT << GPIO_MODER_MODE4_POS);
+	GPIOB->MODER |= (GPIO_OUTPUT << GPIO_MODER_MODE4_Pos);
 	
 	// Set trigger pin to low
 	GPIOB->ODR &= ~TRIGGER;
 	
 	// Configure echo pin (PB5) as input
 	GPIOB->MODER &= ~GPIO_MODER_MODE5_Msk;
-	GPIOB->MODER |= (GPIO_INPUT << GPIO_MODER_MODE5_POS);
+	GPIOB->MODER |= (GPIO_INPUT << GPIO_MODER_MODE5_Pos);
 	
 	// initlialize timer
 	sonarTimer_init(timerInterval);
@@ -86,7 +86,7 @@ int sonar_read(void){
 	
 void sonarTimer_init(int microseconds) {
 	// enable clock access to timer 17
-	RCC -> APBENR2 |= RCC_APBENR2_TIM17_EN;
+	RCC -> APBENR2 |= RCC_APBENR2_TIM17EN;
 
 	// set prescaler value
 	TIM17->PSC = TIM17_PSC_FACTOR - 1;
