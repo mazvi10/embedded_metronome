@@ -16,9 +16,22 @@ def listen_bpm():
     sample_rate = int(sd.query_devices(kind="input")["default_samplerate"])
     audio = sd.rec(
         LISTEN_SECONDS * sample_rate, samplerate=sample_rate, channels=1,
-         dtype="float32", blocking=True,)[:, 0]
+        dtype="float32", blocking=True, )[:, 0]
 
-    tempo, beats = librosa.beat.beat_track(y=audio, sr=sample_rate)
+    hop_length = 512
+
+    # listen for snares
+    groove_onsets = librosa.onset.onset_strength(
+        y=audio,  sr=sample_rate,  hop_length=hop_length,
+        fmin=40, fmax=600,  n_mels=24,
+    )
+
+    tempo, beats = librosa.beat.beat_track(
+        onset_envelope=groove_onsets,
+        sr=sample_rate,
+        hop_length=hop_length,
+        start_bpm=100,
+    )
     bpm = float(np.asarray(tempo).item())
 
     # out of range
