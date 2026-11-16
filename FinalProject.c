@@ -32,7 +32,7 @@
 
 
 /* FUNCTIONS */
-void update_servo(void);
+void update_servo(uint16_t);
 int uart1_RxAvail(void);
 int uart2_RxAvail(void);
 void TIM16_IRQHandler(void);
@@ -47,7 +47,7 @@ void TIM16_IRQHandler(void);
 #define SERVO_MAX		400		// 2ms
 #define ADC_MAX			4095	// 12-bit converter
 #define BUFFER 			25		// potentiometer buffer
-#define BT_TIMEOUT 		8000	// 8 second bluetooth timeout 
+#define BT_TIMEOUT 		8000	// 8 second bluetooth timeout
 #define LED1			(1U<<5)
 #define LED2			(1U<<6)
 volatile int timerFlag = 0;
@@ -66,40 +66,39 @@ int main (void){
 	GPIOA->MODER |= (GPIO_OUTPUT << GPIO_MODER_MODE6_Pos);
 
 	// intialize
-	uart1_init(); 
+	uart1_init();
 	uart2_init();
-	i2c_init(); 
-	SevenSeg_init(); 
+	i2c1_init();
+	SevenSeg_init();
 	tim14_pa7_pwm_init(PWM_PSC_FACTOR, PWM_TIMER_MAX);
 	tim16_ms_interrupt_init(50);
-	adc_init(); 
+	adc_init();
 	sonar_init();
 	bluefruit_mode_init();
 	bluefruit_data_mode();
-	
+
 	//test uart1-2 pass through
 	printf("UART1-2 passthorugh test \r\n");
-	
+
 	// define variables
 	int pot1Val = 0;
 	int pot2Val = 0;
 	uint16_t bpm = 0;
 	int beatInterval = 0;
 	int sonarDistance = 0;
-	int displayMode = 0;
 	int servoEn = 0;
 	int lastBeatTime = 0;
 	int servoPosition = 0;
 	int ledPosition = 0;
-	int sevenSegMode = 0; 
+	int sevenSegMode = 0;
 	int beatDisplay = 0;
 	int recievedNum = 0;
-	int bluetoothConnected = 0; 
-	int lastBluetoothTime = 0; 
+	int bluetoothConnected = 0;
+	int lastBluetoothTime = 0;
 	uint8_t display_buffer[2 * HT16K33_NBUF];
 
 	while (1){
-		if uart1_RxAvail()){
+		if (uart1_RxAvail()){
 			int c = uart1_read();
 			uart2_write(c);
 
@@ -108,45 +107,51 @@ int main (void){
 				recievedNum = (recievedNum * 10) + (c - '0');
 			}
 			else if ( c== '\n' || c == '\r'){
-				bpm = recievedNum; 
-				recievedNum = 0; 
+				bpm = recievedNum;
+				recievedNum = 0;
 			}
-			bluetoothConnected = 1; 
-			lastBluetoothTime = milliseconds(); 
+			bluetoothConnected = 1;
+			lastBluetoothTime = milliseconds();
 		}
-		
-		if (uart2_(RxAvail()){
+
+		if (uart2_RxAvail()){
 			int c = uart2_read();
 			uart1_write(c);
 		}
 
 		// check if bluetooth has timed out
 		if (milliseconds() - lastBluetoothTime > BT_TIMEOUT){
-			bluetoothConnected = 0; 
+			bluetoothConnected = 0;
 		}
-	
+
 		if (timerFlag == 1){
 			timerFlag = 0;
 
 			// read first pot value
-			setChannel(0);
-			pot1Val = adc_read();
-			
+			adc_setChannel(0);
+			pot1Val = adc_getValue();
+
 			// read second pot value
-			setChannel (1); 
-			pot2Val = adc_read();
-			
+			adc_setChannel (1);
+			pot2Val = adc_getValue();
+
 			// calculate bpm
 			if (bluetoothConnected == 0){
-				bpm = (pot2Val * BPM_MAX) / ADC_MAX;	
-			} 
+				bpm = (pot2Val * BPM_MAX) / ADC_MAX;
+			}
+			if (bpm > 0){
+				beatInterval = 60000 / bpm;
+			}
+			else {
+				beatInterval = 0;
+			}
 
 			// read sonar distance
-			sonarDistance = sonar_read(); 
+			sonarDistance = sonar_read();
 
 			// enable/disable servo
 			if (sonarDistance < MIN_DISTANCE){
-				if (bpm < 200 & bpm > 0){
+				if ((bpm < 200) & (bpm > 0)){
 					servoEn = 1;
 				}
 			}
@@ -158,14 +163,14 @@ int main (void){
 			if (pot1Val < (1365-BUFFER)){	//bpm display mode
 				sevenSegMode = 0; // bpm display mode
 			}
-			else if (pot1Val <= (2371-BUFFER) & pot1Val > 1365){
+			else if ((pot1Val <= (2371-BUFFER)) & (pot1Val > 1365)){
 				sevenSegMode = 1; // beat on beat mode
 			}
 			else if (pot1Val > 2371) {
 				sevenSegMode = 2; // speed mode
 			}
 			else {
-				sevenSegMode = 0; 
+				sevenSegMode = 0;
 			}
 		}
 		if (milliseconds() - lastBeatTime >= beatInterval){
@@ -173,54 +178,48 @@ int main (void){
 			lastBeatTime = milliseconds();
 
 			// toggle the LEDS
-			if (flashEn == 1){
-				//toggle leds
-				if (ledPositon == 0){
-					// Turn on LED 1
-					GPIOA->ODR |= LED1;
+			if (ledPosition == 0){
+				// Turn on LED 1
+				GPIOA->ODR |= LED1;
 
-					// turn off LED 2
-					GPIOA->ODR &= ~LED2;
+				// turn off LED 2
+				GPIOA->ODR &= ~LED2;
 
-					//update LED Position
-					ledPosition = 1;
-				}
-				else {
-					// Turn on LED 2
-					GPIOA->ODR |= LED2;
-
-					// Turn of LED 1
-					GPIOA->ODR &~ LED1;
-
-					//update LED Position
-					ledPosition = 0;
-				}
+				//update LED Position
+				ledPosition = 1;
 			}
 			else {
-				GPIOA->ODR &~ LED1;
-				GPIOA->ODR &~ LED2;
+				// Turn on LED 2
+				GPIOA->ODR |= LED2;
+
+				// Turn off LED 1
+				GPIOA->ODR &= ~LED1;
+
+				//update LED Position
+				ledPosition = 0;
 			}
+		}
 
 			// toggle the servo
 			if (servoEn == 1){
-				if (position == 0){
+				if (servoPosition == 0){
 					update_servo(SERVO_MAX);
-					position = 1;
+					servoPosition = 1;
 				}
 				else{
-					update_servo(SERVO_MID)
-					position = 0;
+					update_servo(SERVO_MID);
+					servoPosition = 0;
 				}
 			}
 
 			//seven seg bpm mode
-			if (sevenSegMode = 1){
+			if (sevenSegMode == 0){
 				SevenSeg_number(bpm, display_buffer);
 				SevenSeg_write(display_buffer);
 			}
 
 			// seven seg speed mode
-			if (sevenSegMode = 2){
+			if (sevenSegMode == 2){
 				if (bpm > 100){
 					// seven seg display slow
 					display_buffer[0] = 0x71;	// F
@@ -232,13 +231,13 @@ int main (void){
 					display_buffer[0] = 0x00;	// off
 					display_buffer[2] = 0x5B;	// s
 					display_buffer[6] = 0x38;	// L
-					display_buffer[8] = 0x3F;	// 0	
+					display_buffer[8] = 0x3F;	// 0
 				}
 			}
 
 			// seven seg beat mode
-			if (sevenSegMode = 1){
-				if (beatDisplay = 1){
+			if (sevenSegMode == 1){
+				if (beatDisplay == 1){
 					// set buffer to say bEAt
 					display_buffer[0] = 0x7C;	// b
 					display_buffer[2] = 0x79;	// E
@@ -266,10 +265,10 @@ int main (void){
 			}
 		}
 	}
-}
+
 
 // update servo function
-void updateServo(uint16_t value) {
+void update_servo(uint16_t value) {
 	if (value>SERVO_MAX)
 		value = SERVO_MAX;
 	else if (value < SERVO_MIN)
@@ -286,20 +285,20 @@ void TIM16_IRQHandler(void) {
 	__enable_irq();
 }
 
-int uart2_rxAvail(void){
-	if(USART->ISR & USART_ISR_RXNE_RXFNE) {
-		return 1; 
+int uart2_RxAvail(void){
+	if(USART2->ISR & USART_ISR_RXNE_RXFNE) {
+		return 1;
 	}
 	else{
 		return 0;
 	}
 }
 
-int uart1RxAvail(void){
+int uart1_RxAvail(void){
 	if(USART1->ISR & USART_ISR_RXNE_RXFNE){
 		return 1;
 	}
 	else {
-		return 0; 
+		return 0;
 	}
 }
