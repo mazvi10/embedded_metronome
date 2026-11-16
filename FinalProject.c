@@ -6,7 +6,12 @@
  *
  * Dependencies:
  *
- * I/O pins:
+ * I/O pins: PA:	0, 1 (Potentiometer 1 and 2) 
+ *					5, 6 (LED 1 and 2)
+ *					9  (USART 1 Tx )
+ *					10 (USART 1 Rx )
+ *					11 (USART 1 CTS)
+ *					12 (USART 1 RTS)
  *
  * Revisions:
  *
@@ -17,7 +22,11 @@
 #include "ES28.h"
 #include "uart.h"
 #include "i2c.h"
-#include "SevenSegPartial.h"
+#include "SevenSeg.h"
+#include "ADC.h"
+#include "tim.h"
+#include "SonarSensor.h"
+
 
 /* FUNCTIONS */
 update_servo(void);
@@ -127,21 +136,15 @@ int main (void){
 			if (bluetoothConnected == 0){
 				bpm = (pot2Val * BPM_MAX) / ADC_MAX;	
 			} 
-	 
-			if (bpm > 0){
-				beatInterval = 60000/bpm;
-				flashEn = 1;
-			}
-			else {
-				flashEn = 0;
-			}
 
 			// read sonar distance
 			sonarDistance = sonar_read(); 
 
 			// enable/disable servo
 			if (sonarDistance < MIN_DISTANCE){
-				servoEn = 1;
+				if (bpm < 200 & bpm > 0){
+					servoEn = 1;
+				}
 			}
 			else {
 				servoEn = 0;
@@ -260,3 +263,22 @@ int main (void){
 		}
 	}
 }
+
+// update servo function
+void updateServo(uint16_t value) {
+	if (value>SERVO_MAX)
+		value = SERVO_MAX;
+	else if (value < SERVO_MIN)
+		value = SERVO_MIN;
+	tim14_pwm_set(value);
+}
+
+// timer 16 interupt handler
+void TIM16_IRQHandler(void) {
+	__disable_irq();
+	/* Clear UIF in status register */
+	TIM16->SR &= ~TIM_SR_UIF;
+	timerFlag = 1;
+	__enable_irq();
+}
+
