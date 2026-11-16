@@ -32,6 +32,7 @@ update_servo(void);
 #define SERVO_MAX		400		// 2ms
 #define ADC_MAX			4095	// 12-bit converter
 #define BUFFER 			25		// potentiometer buffer
+#define BT_TIMEOUT 		1000	// 1 second bluetooth timeout 
 #define LED1			(1U<<5)
 #define LED2			(1U<<6)
 volatile int timerFlag = 0;
@@ -81,6 +82,7 @@ int main (void){
 	int beatDisplay = 0;
 	int recievedNum = 0;
 	int bluetoothConnected = 0; 
+	int lastBluetoothTime = 0; 
 	uint8_t display_buffer[2 * HT16K33_NBUF];
 
 	while (1){
@@ -97,13 +99,19 @@ int main (void){
 				recievedNum = 0; 
 			}
 			bluetoothConnected = 1; 
+			lastBluetoothTime = milliseconds(); 
 		}
-
+		
 		if (uart2_(RxAvail()){
 			int c = uart2_read();
 			uart1_write(c);
-		
 		}
+
+		// check if bluetooth has timed out
+		if (milliseconds() - lastBluetoothTime > BT_TIMEOUT){
+			bluetoothConnected = 0; 
+		}
+	
 		if (timerFlag == 1){
 			timerFlag = 0;
 
@@ -116,8 +124,10 @@ int main (void){
 			pot2Val = adc_read();
 			
 			// calculate bpm
-			// figure out how to turn on this if bluetooth is off. 
-			// bpm = (pot2Val * BPM_MAX) / ADC_MAX;
+			if (bluetoothConnected == 0){
+				bpm = (pot2Val * BPM_MAX) / ADC_MAX;	
+			} 
+	 
 			if (bpm > 0){
 				beatInterval = 60000/bpm;
 				flashEn = 1;
@@ -136,8 +146,6 @@ int main (void){
 			else {
 				servoEn = 0;
 			}
-
-			// somehow read bluetooth data
 
 			// determine seven seg mode
 			if (pot1Val < (1365-BUFFER)){	//bpm display mode
