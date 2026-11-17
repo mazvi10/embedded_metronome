@@ -10,28 +10,21 @@ UART_NOTIFY = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 LISTEN_SECONDS = 8
 RESEND_SECONDS = 4
 BPM_MAX = 200
+BPM_TOLERANCE = 3
+BPM_STALE_SECONDS = 20
 
 # record ambient audio and estimate bpm
 def listen_bpm():
     sample_rate = int(sd.query_devices(kind="input")["default_samplerate"])
     audio = sd.rec(
-        LISTEN_SECONDS * sample_rate, samplerate=sample_rate, channels=1,
-        dtype="float32", blocking=True, )[:, 0]
+        LISTEN_SECONDS * sample_rate,
+        samplerate=sample_rate,
+        channels=1,
+        dtype="float32",
+        blocking=True,
+    )[:, 0]
 
-    hop_length = 512
-
-    # listen for snares
-    groove_onsets = librosa.onset.onset_strength(
-        y=audio,  sr=sample_rate,  hop_length=hop_length,
-        fmin=40, fmax=600,  n_mels=24,
-    )
-
-    tempo, beats = librosa.beat.beat_track(
-        onset_envelope=groove_onsets,
-        sr=sample_rate,
-        hop_length=hop_length,
-        start_bpm=100,
-    )
+    tempo, beats = librosa.beat.beat_track(y=audio, sr=sample_rate)
     bpm = float(np.asarray(tempo).item())
 
     # out of range
@@ -59,10 +52,12 @@ async def main():
         await client.start_notify(UART_NOTIFY, on_uart_data)
 
         accepted_bpm = None
+        last_confirmed = None
         bpm_updated = asyncio.Event()
+        loop = asyncio.get_running_loop()
 
         async def detect_bpm():
-            nonlocal accepted_bpm
+            nonlocal accepted_bpm, last_confirmed
             previous = None
 
             while client.is_connected:
@@ -80,16 +75,23 @@ async def main():
                 print(f"Estimated {bpm} BPM")
 
                 # Comparing 2 readingd
-                stable = previous is not None and abs(bpm - previous) <= 3
-                if accepted_bpm is None or (
-                    stable and abs(bpm - accepted_bpm) >= 3
+                stable = previous is not None and abs(bpm - previous) <= BPM_TOLERANCE
+                if (
+                    accepted_bpm is not None
+                    and abs(bpm - accepted_bpm) <= BPM_TOLERANCE
                 ):
-                    accepted_bpm = bpm
+                    last_confirmed = loop.time()
+                elif stable:
+                    accepted_bpm = round((previous + bpm) / 2)
+                    last_confirmed = loop.time()
                     bpm_updated.set()
+                    print(f"Locked to {accepted_bpm} BPM")
 
                 previous = bpm
 
         async def send_bpm():
+            nonlocal accepted_bpm, last_confirmed
+
             while client.is_connected:
                 # Send when the BPM changes or resend after 4 seconds
                 try:
@@ -100,13 +102,23 @@ async def main():
 
                 if not client.is_connected:
                     break
-                if accepted_bpm is not None:
-                    await client.write_gatt_char(
-                        UART_WRITE,
-                        f"{accepted_bpm}\n".encode("ascii"),
-                        response=True,
-                    )
-                    print(f"Sent {accepted_bpm} BPM")
+
+                if accepted_bpm is None or last_confirmed is None:
+                    continue
+
+                # stop resending an old BPM so the Nucleo can time out
+                if loop.time() - last_confirmed >= BPM_STALE_SECONDS:
+                    print("BPM lock expired. Waiting for a beat.")
+                    accepted_bpm = None
+                    last_confirmed = None
+                    continue
+
+                await client.write_gatt_char(
+                    UART_WRITE,
+                    f"{accepted_bpm}\n".encode("ascii"),
+                    response=True,
+                )
+                print(f"Sent {accepted_bpm} BPM")
 
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(detect_bpm())

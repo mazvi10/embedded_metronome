@@ -127,6 +127,7 @@ void uart1_init(void) {
 	/* enable transmitter and receiver, clear other bits (set them back to defaults) */
 	USART1->CR3 |= USART_CR3_RTSE | USART_CR3_CTSE;
 	USART1->CR1 = USART_CR1_RE | USART_CR1_TE;
+	USART1->CR1 |= USART_CR1_UE;
 
 	/* enable uart module */
 	USART1->CR1 |= USART_CR1_UE;
